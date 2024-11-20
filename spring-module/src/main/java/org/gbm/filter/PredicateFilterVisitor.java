@@ -5,38 +5,42 @@ import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.types.ConstantImpl;
 import com.querydsl.core.types.Expression;
 import com.querydsl.core.types.Ops;
-import com.querydsl.core.types.Path;
 import com.querydsl.core.types.Predicate;
-import com.querydsl.core.types.dsl.ComparableExpression;
-import com.querydsl.core.types.dsl.DateExpression;
 import com.querydsl.core.types.dsl.EntityPathBase;
 import com.querydsl.core.types.dsl.Expressions;
-import com.querydsl.core.types.dsl.LiteralExpression;
-import com.querydsl.core.types.dsl.NumberExpression;
 import com.querydsl.core.types.dsl.SimpleExpression;
 import com.querydsl.core.types.dsl.StringExpression;
-import com.querydsl.core.types.dsl.StringPath;
-import jakarta.annotation.PostConstruct;
-import lombok.AllArgsConstructor;
-import lombok.RequiredArgsConstructor;
-import org.antlr.v4.runtime.tree.ParseTree;
-
-import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Arrays;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.Date;
+import java.util.List;
+import lombok.RequiredArgsConstructor;
+import org.antlr.v4.runtime.tree.ParseTree;
+import org.gbm.filter.properties.FilterHelper;
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Component;
 
+@Component
+@Scope("prototype")
+@RequiredArgsConstructor
 public class PredicateFilterVisitor extends org.gbm.filter.FilterBaseVisitor<Predicate> {
 
-    final static ObjectMapper objMapper = new ObjectMapper();
+    static final ObjectMapper objMapper = new ObjectMapper();
+
+    final FilterHelper filterHelper;
+    final ExpressionBuilder expressionBuilder;
 
     EntityPathBase<?> refInstance;
 
-    public PredicateFilterVisitor(Class<? extends EntityPathBase<?>> refClass) {
+    public PredicateFilterVisitor withRefClass(Class<? extends EntityPathBase<?>> refClass) {
         try {
-            refInstance = (EntityPathBase<?>) Arrays.stream(refClass.getFields()).filter(f -> refClass.isAssignableFrom(f.getType()))
-                    .filter(f -> Modifier.isStatic(f.getModifiers())).findFirst().orElseThrow(() -> new RuntimeException("Could not find singleton instance of " + refClass)).get(null);
+            refInstance = (EntityPathBase<?>) Arrays.stream(refClass.getFields())
+                    .filter(f -> refClass.isAssignableFrom(f.getType()))
+                    .filter(f -> Modifier.isStatic(f.getModifiers()))
+                    .findFirst()
+                    .orElseThrow(() -> new RuntimeException("Could not find singleton instance of " + refClass))
+                    .get(null);
+            return this;
         } catch (Exception e) {
             throw new RuntimeException("Could not create PredicateFieldVisitor", e);
         }
@@ -45,9 +49,11 @@ public class PredicateFilterVisitor extends org.gbm.filter.FilterBaseVisitor<Pre
     @Override
     public Predicate visit(ParseTree parseTree) {
         return switch (parseTree) {
-            case org.gbm.filter.FilterParser.ParenthesisContext parenthesisContext -> visitParenthesis(parenthesisContext);
+            case org.gbm.filter.FilterParser.ParenthesisContext parenthesisContext -> visitParenthesis(
+                    parenthesisContext);
             case org.gbm.filter.FilterParser.OperationContext operationContext -> visitOperation(operationContext);
-            case org.gbm.filter.FilterParser.ComparationContext comparationContext -> visitComparation(comparationContext);
+            case org.gbm.filter.FilterParser.ComparationContext comparationContext -> visitComparation(
+                    comparationContext);
             case org.gbm.filter.FilterParser.NegationContext negationContext -> visitNegation(negationContext);
             case null -> throw new UnsupportedOperationException("Missing parseTree");
             default -> throw new UnsupportedOperationException("Unsupported expression: " + parseTree.getClass());
@@ -69,22 +75,41 @@ public class PredicateFilterVisitor extends org.gbm.filter.FilterBaseVisitor<Pre
         return visit(ctx.getChild(1));
     }
 
-    SimpleExpression<?> extract(ParseTree eval) {
+    Expression<?> extract(ParseTree eval) {
         if (eval instanceof org.gbm.filter.FilterParser.FieldContext) {
             try {
                 String field = eval.getText();
-                return (SimpleExpression<?>) refInstance.getClass().getField(field).get(refInstance);
+                return (SimpleExpression<?>)
+                        refInstance.getClass().getField(field).get(refInstance);
             } catch (Exception e) {
                 throw new RuntimeException(String.format("Could not obtain field '%s'", eval.getText()), e);
             }
         }
         String function = eval.getChild(0).getText();
-        throw new RuntimeException("Unsupported function call: " + function);
+        Object[] args = new Object[(eval.getChildCount() - 2) / 2];
+        for (int i = 0; i < args.length; i++) {
+            ParseTree arg = eval.getChild(i * 2 + 2);
+            Object o = null;
+            if (arg instanceof org.gbm.filter.FilterParser.TextContext
+                    || arg instanceof org.gbm.filter.FilterParser.NumberContext) {
+                o = coerce(
+                        arg.getText(),
+                        arg instanceof org.gbm.filter.FilterParser.TextContext ? String.class : Double.class);
+            } else {
+                o = extract(arg);
+            }
+            args[i] = o;
+        }
+        return expressionBuilder.get(function).apply(args);
     }
+
     Object coerce(String value, Class<?> type) {
         try {
-            if (!String.class.equals(type) && value.startsWith("\"") && value.endsWith("\"")) {
+            if (!List.of(String.class, Date.class).contains(type) && value.startsWith("\"") && value.endsWith("\"")) {
                 value = value.substring(1, value.length() - 1);
+            }
+            if (Date.class.equals(type)) {
+                return filterHelper.getDateFormat().parse(value);
             }
             return objMapper.readValue(value, type);
         } catch (Exception e) {
@@ -103,7 +128,7 @@ public class PredicateFilterVisitor extends org.gbm.filter.FilterBaseVisitor<Pre
             case "gt" -> Expressions.booleanOperation(Ops.GT, curr, value);
             case "le" -> Expressions.booleanOperation(Ops.LOE, curr, value);
             case "ge" -> Expressions.booleanOperation(Ops.GOE, curr, value);
-            case "in" -> ((StringExpression)value).contains((Expression<String>) curr);
+            case "in" -> ((StringExpression) value).contains((Expression<String>) curr);
             default -> throw new UnsupportedOperationException(expr.getText());
         };
     }
@@ -119,7 +144,7 @@ public class PredicateFilterVisitor extends org.gbm.filter.FilterBaseVisitor<Pre
             case "gt" -> Expressions.booleanOperation(Ops.GT, value, curr);
             case "le" -> Expressions.booleanOperation(Ops.LOE, value, curr);
             case "ge" -> Expressions.booleanOperation(Ops.GOE, value, curr);
-            case "in" -> ((StringExpression)curr).contains((Expression<String>) value);
+            case "in" -> ((StringExpression) curr).contains((Expression<String>) value);
             default -> throw new UnsupportedOperationException(expr.getText());
         };
     }
@@ -135,11 +160,15 @@ public class PredicateFilterVisitor extends org.gbm.filter.FilterBaseVisitor<Pre
         ParseTree expr = ctx.getChild(1);
         ParseTree argB = ctx.getChild(2);
         try {
-            if ((argA instanceof org.gbm.filter.FilterParser.FieldContext || argA instanceof org.gbm.filter.FilterParser.FunctionContext)
-                    && (argB instanceof org.gbm.filter.FilterParser.TextContext || argB instanceof org.gbm.filter.FilterParser.NumberContext)) {
+            if ((argA instanceof org.gbm.filter.FilterParser.FieldContext
+                            || argA instanceof org.gbm.filter.FilterParser.FunctionContext)
+                    && (argB instanceof org.gbm.filter.FilterParser.TextContext
+                            || argB instanceof org.gbm.filter.FilterParser.NumberContext)) {
                 return compareFieldToLiteral(argA, expr, argB.getText());
-            } else if ((argA instanceof org.gbm.filter.FilterParser.TextContext || argA instanceof org.gbm.filter.FilterParser.NumberContext)
-                    && (argB instanceof org.gbm.filter.FilterParser.FieldContext || argB instanceof org.gbm.filter.FilterParser.FunctionContext)) {
+            } else if ((argA instanceof org.gbm.filter.FilterParser.TextContext
+                            || argA instanceof org.gbm.filter.FilterParser.NumberContext)
+                    && (argB instanceof org.gbm.filter.FilterParser.FieldContext
+                            || argB instanceof org.gbm.filter.FilterParser.FunctionContext)) {
                 return compareLiteralToField(argA.getText(), expr, argB);
             } else {
                 // TODO: support 'name contains city'?
