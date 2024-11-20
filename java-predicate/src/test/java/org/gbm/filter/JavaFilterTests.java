@@ -1,13 +1,12 @@
 package org.gbm.filter;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -60,7 +59,8 @@ public class JavaFilterTests {
 
     protected List<Person> filter(String filter) {
         List<Person> result = people.stream()
-                .filter(JavaFilterUtils.asPredicate(FilterCriteria.from(filter))).toList();
+                .filter(JavaFilterUtils.asPredicate(FilterCriteria.from(filter)))
+                .toList();
         if (result.isEmpty()) {
             log.info("No results found");
         } else {
@@ -80,11 +80,9 @@ public class JavaFilterTests {
 
     @Test
     public void testBasicCondition() {
-        Assertions.assertEquals(
-                1, filter("""
-                        name eq "David"
-                        """)
-                        .size());
+        Assertions.assertEquals(1, filter("""
+						name eq "David"
+						""").size());
     }
 
     @Test
@@ -93,7 +91,6 @@ public class JavaFilterTests {
                 2,
                 filter("""
 				name eq "David" or heightInCm gt 180.2
-				""")
-                        .size());
+				""").size());
     }
 }

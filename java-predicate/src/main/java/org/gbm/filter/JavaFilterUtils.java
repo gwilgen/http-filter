@@ -1,7 +1,5 @@
 package org.gbm.filter;
 
-import org.gbm.filter.FilterBaseVisitor;
-
 import java.util.Optional;
 import java.util.function.Predicate;
 

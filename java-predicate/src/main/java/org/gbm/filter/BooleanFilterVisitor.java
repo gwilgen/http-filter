@@ -8,7 +8,6 @@ import lombok.AllArgsConstructor;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.apache.commons.lang3.StringUtils;
 import org.gbm.filter.method.FilterMethodsProvider;
-import org.gbm.filter.FilterParser;
 
 @AllArgsConstructor
 public class BooleanFilterVisitor extends org.gbm.filter.FilterBaseVisitor<Boolean> {
