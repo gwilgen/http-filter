@@ -20,11 +20,6 @@
         <module>core-module</module>
         <module>java-predicate</module>
         <module>spring-module</module>
-        <!--
-                <module>spring-controller-module</module>
-                <module>spring-jpa-module</module>
-                <module>java-predicate-module</module>
-        -->
     </modules>
 
     <build>
