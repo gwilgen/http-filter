@@ -15,11 +15,13 @@ expression
 
 
 arg
-    : ID '(' arg (',' arg)* ')'                     #function
-    | ID                                            #field
+    : qname '(' arg (',' arg)* ')'                  #function
+    | qname                                         #field
     | STRING                                        #text
     | NUM                                           #number
 ;
+
+qname: ID ('.' ID)*;
 
 // LEXER
 

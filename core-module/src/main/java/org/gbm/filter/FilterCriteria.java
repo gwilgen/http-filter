@@ -4,14 +4,13 @@ import lombok.Builder;
 import org.antlr.v4.runtime.ANTLRErrorListener;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
-import org.gbm.filter.FilterParser;
-import org.gbm.filter.FilterLexer;
 
 @Builder
 public class FilterCriteria {
 
-    final static ANTLRErrorListener errorListener = new FilterErrorListener();
+    static final ANTLRErrorListener errorListener = new FilterErrorListener();
     FilterParser.ExpressionContext ctx;
+
     public static FilterCriteria from(String filter) {
         if (null == filter) {
             return FilterCriteria.builder().build();
