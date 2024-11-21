@@ -10,13 +10,11 @@ import org.springframework.web.bind.annotation.RestController;
 @AllArgsConstructor
 public class SpringController {
 
-    FilterComponent filterComponent;
-    PeopleRepository repository;
+    FilterUrlReader filterUrlReader;
+    PeopleService service;
 
     @RequestMapping("list")
     public List<Person> list(Pageable pageable) {
-        return repository
-                .findAll(filterComponent.toQuerydslPredicate(QPerson.class), pageable)
-                .getContent();
+        return service.getPage(filterUrlReader.getFilter(), pageable);
     }
 }
